@@ -1,0 +1,6 @@
+- name: Test de connectivité avec les serveurs Spring Boot
+  hosts: springboot
+  gather_facts: no
+  tasks:
+    - name: Ping des hôtes
+      ansible.builtin.ping:

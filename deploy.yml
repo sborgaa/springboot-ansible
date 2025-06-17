@@ -1,0 +1,72 @@
+---
+- name: Déployer une application Spring Boot
+  hosts: springboot
+  become: yes
+
+  tasks:
+    - name: Installer Java, Git et Maven
+      apt:
+        name:
+          - openjdk-17-jdk
+          - git
+          - maven
+        state: present
+        update_cache: yes
+
+    - name: Cloner le dépôt Spring Boot
+      git:
+        repo: https://github.com/spring-guides/gs-spring-boot.git
+        dest: /opt/spring-boot-app
+        version: main
+
+    - name: Rendre le wrapper Maven exécutable
+      file:
+        path: /opt/spring-boot-app/complete/mvnw
+        mode: '0755'
+
+    - name: Compiler l'application
+      shell: ./mvnw package
+      args:
+        chdir: /opt/spring-boot-app/complete
+
+    - name: Vérifier le nom du fichier JAR généré
+      find:
+        paths: /opt/spring-boot-app/complete/target
+        patterns: "*.jar"
+      register: jar_files
+
+    - name: Copier le JAR compilé
+      copy:
+        src: "{{ item.path }}"
+        dest: /opt/spring-boot-app/app.jar
+        remote_src: yes
+      loop: "{{ jar_files.files }}"
+      when: jar_files.matched > 0
+
+    - name: Créer le service systemd
+      copy:
+        dest: /etc/systemd/system/springboot.service
+        content: |
+          [Unit]
+          Description=Spring Boot Application
+          After=network.target
+
+          [Service]
+          User=ubuntu
+          ExecStart=/usr/bin/java -jar /opt/spring-boot-app/app.jar
+          SuccessExitStatus=143
+          Restart=on-failure
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Recharger systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Activer et démarrer le service
+      systemd:
+        name: springboot
+        enabled: yes
+        state: started
